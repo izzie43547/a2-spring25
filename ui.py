@@ -1,4 +1,5 @@
-# user_interface.py (continued)
+# user_interface.py
+
 import shlex
 from game_logic import GameState
 from typing import List

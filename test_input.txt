@@ -1,0 +1,15 @@
+4
+4
+EMPTY
+F R Y
+
+A
+
+>
+V 1 1 r
+V 2 1 r
+V 3 1 r
+F R R
+A
+
+Q 
