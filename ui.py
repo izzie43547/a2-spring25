@@ -65,7 +65,7 @@ def display_field(game_state: GameState) -> None:
                 row_str += "   " # Default case, should ideally not be reached
         row_str += "|"
         print(row_str)
-    print("-" * (3 * cols) + " ")
+    print(" " + "-" * (3 * cols) + " ")
     if not game_state.has_viruses():
         print("LEVEL CLEARED")
 

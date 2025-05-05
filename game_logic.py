@@ -42,17 +42,23 @@ class GameState:
             color1 (str): The color of the left/top segment ('R', 'B', or 'Y').
             color2 (str): The color of the right/bottom segment ('R', 'B', or 'Y').
         """
+        # If there's already a faller, do nothing
+        if self.faller is not None:
+            return
+            
         start_col = self.cols // 2
         if self.cols % 2 == 0:
             # Check if the middle two cells in the second row are occupied
             if self.field[1][start_col] != ' ' or self.field[1][start_col + 1] != ' ':
                 self.game_over = True
+                self.faller = {'segments': [(1, start_col, color1), (1, start_col + 1, color2)], 'orientation': 'horizontal', 'landed': True}
                 return
             self.faller = {'segments': [(1, start_col, color1), (1, start_col + 1, color2)], 'orientation': 'horizontal', 'landed': False}
         else:
             # Check if the middle cell in the second row is occupied
             if self.field[1][start_col] != ' ':
                 self.game_over = True
+                self.faller = {'segments': [(1, start_col, color1), (0, start_col, color2)], 'orientation': 'vertical', 'landed': True}
                 return
             self.faller = {'segments': [(1, start_col, color1), (0, start_col, color2)], 'orientation': 'vertical', 'landed': False}
             # For odd columns, we'll start vertical for simplicity of initial positioning
@@ -189,32 +195,84 @@ class GameState:
                         else:
                             self.field[r][c] = color # Vertical is treated as single segments upon landing
                     self.faller = None
-                    self._process_matches()
-                    self._apply_field_gravity()
+                    self._process_matches_and_gravity()
             else:
-                self._apply_field_gravity() # Apply gravity to any floating pieces
-                self._process_matches()
-
+                self._process_matches_and_gravity()
         else:
-            self._apply_field_gravity()
-            self._process_matches()
+            self._process_matches_and_gravity()
 
-    def _apply_field_gravity(self) -> None:
+    def _process_matches_and_gravity(self) -> None:
         """
-        Applies gravity to any single capsule pieces with empty space below.
+        Processes matches and gravity until no more changes occur.
         """
-        moved = True
-        while moved:
-            moved = False
-            new_field = [row[:] for row in self.field]
-            for r in range(self.rows - 2, -1, -1):
-                for c in range(self.cols):
-                    cell = self.field[r][c]
-                    if cell.isalpha() and cell.isupper() and self.field[r + 1][c] == ' ':
-                        new_field[r + 1][c] = cell
+        while True:
+            # First process any matches
+            matched = self._process_matches()
+            if not matched:
+                # If no matches, check for gravity
+                if not self._apply_field_gravity():
+                    # If no gravity changes, we're done
+                    break
+
+    def _process_matches(self) -> bool:
+        """
+        Processes matches in the field and returns True if any matches were found.
+        """
+        matched_cells = set()
+        # Only check for matches on landed/frozen blocks
+        for r in range(self.rows):
+            for c in range(self.cols):
+                cell = self.field[r][c]
+                if cell != ' ' and not cell.startswith('*'):  # Not empty and not already matched
+                    matches = self._check_match(r, c)
+                    if matches:
+                        matched_cells.update(matches)
+
+        if not matched_cells:
+            return False
+
+        # Mark matched cells
+        for r, c in matched_cells:
+            self.field[r][c] = f'*{self.field[r][c]}*'
+
+        # Remove matched cells
+        new_field = [row[:] for row in self.field]
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.field[r][c].startswith('*') and self.field[r][c].endswith('*'):
+                    new_field[r][c] = ' '
+        self.field = new_field
+        return True
+
+    def _apply_field_gravity(self) -> bool:
+        """
+        Applies gravity to any floating pieces and returns True if any movement occurred.
+        """
+        moved = False
+        new_field = [row[:] for row in self.field]
+        
+        # Process from bottom to top
+        for r in range(self.rows - 2, -1, -1):
+            for c in range(self.cols):
+                cell = self.field[r][c]
+                if cell != ' ' and not cell.startswith('*'):  # Not empty and not matched
+                    # Find the lowest empty space below this cell
+                    lowest_empty = r
+                    for check_r in range(r + 1, self.rows):
+                        if new_field[check_r][c] == ' ':
+                            lowest_empty = check_r
+                        else:
+                            break
+                    
+                    if lowest_empty > r:
+                        # Move the cell down
+                        new_field[lowest_empty][c] = cell
                         new_field[r][c] = ' '
                         moved = True
+        
+        if moved:
             self.field = new_field
+        return moved
 
     def add_virus(self, row: int, col: int, color: str) -> None:
         """
@@ -279,30 +337,6 @@ class GameState:
             matched.extend(vertical_match)
 
         return list(set(matched)) # Remove duplicates
-
-    def _process_matches(self) -> None:
-        """
-        Checks the entire field for matches and marks them for removal.
-        """
-        matched_cells = set()
-        for r in range(self.rows):
-            for c in range(self.cols):
-                if self.field[r][c] != ' ':
-                    matches = self._check_match(r, c)
-                    if matches:
-                        matched_cells.update(matches)
-
-        # Mark matched cells
-        for r, c in matched_cells:
-            self.field[r][c] = f'*{self.field[r][c]}*'
-
-        # Remove matched cells
-        new_field = [row[:] for row in self.field]
-        for r in range(self.rows):
-            for c in range(self.cols):
-                if self.field[r][c].startswith('*') and self.field[r][c].endswith('*'):
-                    new_field[r][c] = ' '
-        self.field = new_field
 
     def has_viruses(self) -> bool:
         """
