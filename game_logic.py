@@ -14,6 +14,9 @@ class GameState:
             initial_field (List[List[str]], optional): The initial state of the field.
                 Defaults to an empty field.
         """
+        if rows < 4 or cols < 3:
+            raise ValueError("Field dimensions must be at least 4 rows and 3 columns")
+            
         self.rows = rows
         self.cols = cols
         if initial_field:
@@ -24,6 +27,7 @@ class GameState:
             self.field = [[' ' for _ in range(cols)] for _ in range(rows)]
         self.faller = None  # Represents the current falling capsule
         self.game_over = False
+        self.matching = False
 
     def get_dimensions(self) -> Tuple[int, int]:
         """
@@ -42,21 +46,20 @@ class GameState:
             color1 (str): The color of the left/top segment ('R', 'B', or 'Y').
             color2 (str): The color of the right/bottom segment ('R', 'B', or 'Y').
         """
-        start_col = self.cols // 2
-        if self.cols % 2 == 0:
-            # Check if the middle two cells in the second row are occupied
-            if self.field[1][start_col] != ' ' or self.field[1][start_col + 1] != ' ':
+        if self.faller:
+            return
+            
+        middle_cols = [self.cols // 2] if self.cols % 2 == 1 else [self.cols // 2 - 1, self.cols // 2]
+        for col in middle_cols:
+            if self.field[0][col] != ' ':
                 self.game_over = True
                 return
-            self.faller = {'segments': [(1, start_col, color1), (1, start_col + 1, color2)], 'orientation': 'horizontal', 'landed': False}
-        else:
-            # Check if the middle cell in the second row is occupied
-            if self.field[1][start_col] != ' ':
-                self.game_over = True
-                return
-            self.faller = {'segments': [(1, start_col, color1), (0, start_col, color2)], 'orientation': 'vertical', 'landed': False}
-            # For odd columns, we'll start vertical for simplicity of initial positioning
-            self._rotate_clockwise() # Initial rotation to horizontal
+                
+        self.faller = {
+            'segments': [(0, middle_cols[0], color1), (0, middle_cols[-1], color2)],
+            'orientation': 'horizontal',
+            'landed': False
+        }
 
     def _can_move(self, faller_segments: List[Tuple[int, int, str]], dx: int = 0, dy: int = 0) -> bool:
         """
@@ -201,20 +204,25 @@ class GameState:
 
     def _apply_field_gravity(self) -> None:
         """
-        Applies gravity to any single capsule pieces with empty space below.
+        Applies gravity to the entire field.
         """
-        moved = True
-        while moved:
-            moved = False
-            new_field = [row[:] for row in self.field]
-            for r in range(self.rows - 2, -1, -1):
-                for c in range(self.cols):
-                    cell = self.field[r][c]
-                    if cell.isalpha() and cell.isupper() and self.field[r + 1][c] == ' ':
-                        new_field[r + 1][c] = cell
-                        new_field[r][c] = ' '
-                        moved = True
-            self.field = new_field
+        # Apply gravity bottom-up for better stability
+        for r in range(self.rows-1, -1, -1):
+            for c in range(self.cols):
+                if self.field[r][c] != ' ':
+                    # Skip viruses as they are not affected by gravity
+                    if isinstance(self.field[r][c], str) and self.field[r][c].islower():
+                        continue
+                        
+                    # Find the lowest empty cell below this one
+                    lowest_empty = r
+                    while lowest_empty < self.rows - 1 and self.field[lowest_empty + 1][c] == ' ':
+                        lowest_empty += 1
+                    
+                    if lowest_empty != r:
+                        # Move the piece down
+                        self.field[lowest_empty][c] = self.field[r][c]
+                        self.field[r][c] = ' '
 
     def add_virus(self, row: int, col: int, color: str) -> None:
         """
@@ -223,10 +231,10 @@ class GameState:
         Args:
             row (int): The row index (0-based).
             col (int): The column index (0-based).
-            color (str): The color of the virus ('r', 'b', or 'y').
+            color (str): The color of the virus ('r', 'R', 'b', 'B', 'y', or 'Y').
         """
         if 0 <= row < self.rows and 0 <= col < self.cols:
-            self.field[row][col] = color
+            self.field[row][col] = color.lower()  # Store virus colors as lowercase
 
     def _check_match(self, r: int, c: int) -> List[Tuple[int, int]]:
         """

@@ -2,7 +2,7 @@
 
 import shlex
 from game_logic import GameState
-from typing import List
+from typing import List, Tuple, Optional
 
 def display_field(game_state: GameState) -> None:
     """
@@ -43,26 +43,12 @@ def display_field(game_state: GameState) -> None:
                 row_str += f" {cell} "
             elif len(cell) == 3 and cell.startswith('*') and cell.endswith('*'):
                 row_str += f"*{cell[1]}*"
-            elif len(cell) == 2 and cell[0] in ('L', 'R') and cell[1].isupper() and game_state.faller and game_state.faller['landed']:
-                if game_state.faller['orientation'] == 'horizontal':
-                    left_c = min(fc for _, fc, _ in game_state.faller['segments'])
-                    color = [seg[2] for seg in game_state.faller['segments'] if seg[1] == c][0]
-                    if c == left_c:
-                        row_str += f"|{color}-"
-                    else:
-                        row_str += f"-{color}|"
-                else:
-                    color = [seg[2] for seg in game_state.faller['segments'] if seg[0] == r][0]
-                    row_str += f"|{color}|"
-            elif len(cell) == 2 and cell[0] in ('L', 'R') and cell[1].isupper(): # Landed but not frozen
-                if cell[0] == 'L':
-                    row_str += f"|{cell[1]}-"
-                else:
-                    row_str += f"-{cell[1]}|"
-            elif len(cell) == 1 and cell.isupper(): # Landed vertical
+            elif len(cell) == 2 and cell[0] in ('L', 'R') and cell[1].isupper():
+                row_str += f"{cell[0]}{cell[1]}{cell[0]}" if cell[0] == '|' else f"{cell[0]}{cell[1]}{cell[0]}"
+            elif len(cell) == 1 and cell.isupper():
                 row_str += f"|{cell}|"
             else:
-                row_str += "   " # Default case, should ideally not be reached
+                row_str += "   "
         row_str += "|"
         print(row_str)
     print("-" * (3 * cols) + " ")
@@ -88,10 +74,14 @@ def parse_command(command: str) -> Tuple[str, Optional[List[str]]]:
     Returns:
         Tuple[str, Optional[List[str]]]: The command and its arguments (if any).
     """
-    parts = shlex.split(command)
-    if not parts:
+    try:
+        parts = shlex.split(command)
+        if not parts:
+            return "", None
+        return parts[0].upper(), parts[1:] if len(parts) > 1 else None
+    except ValueError:
+        print("Invalid command format. Use proper spacing between arguments.")
         return "", None
-    return parts[0].upper(), parts[1:] if len(parts) > 1 else None
 
 def handle_command(game_state: GameState, command: str, args: Optional[List[str]]) -> bool:
     """
@@ -105,6 +95,9 @@ def handle_command(game_state: GameState, command: str, args: Optional[List[str]
     Returns:
         bool: True if the game should continue, False if it should end.
     """
+    if game_state.game_over:
+        return False
+        
     if command == 'Q':
         return False
     elif command == 'F':
@@ -125,19 +118,19 @@ def handle_command(game_state: GameState, command: str, args: Optional[List[str]
             try:
                 row = int(args[0])
                 col = int(args[1])
-                color = args[2].lower()
+                color = args[2].lower()  # Convert to lowercase for validation
                 if color in 'rby':
                     game_state.add_virus(row, col, color)
                 else:
-                    print("Invalid virus color. Use 'r', 'b', or 'y'.")
+                    print("Invalid virus color. Use 'r', 'R', 'b', 'B', 'y', or 'Y'.")
             except ValueError:
                 print("Invalid V command arguments. Use 'V <row> <col> <color>'.")
         else:
             print("Invalid V command format. Use 'V <row> <col> <color>'.")
     elif command == '':
         game_state.apply_gravity()
-    elif command == 'GAME OVER': # Should not be a user command, but handled internally
-        return False
+    else:
+        print(f"Unknown command: {command}")
     return True
 
 def run_game() -> None:
