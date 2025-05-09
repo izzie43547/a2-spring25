@@ -52,8 +52,6 @@ def display_field(game_state: GameState) -> None:
         row_str += "|"
         print(row_str)
     print("-" * (3 * cols) + " ")
-    if not game_state.has_viruses():
-        print("LEVEL CLEARED")
 
 def get_user_command() -> str:
     """
@@ -153,11 +151,11 @@ def run_game() -> None:
     game_state = GameState(rows, cols, initial_field)
 
     while not game_state.game_over:
-        display_field(game_state)
         command_str = get_user_command()
         command, args = parse_command(command_str)
         if not handle_command(game_state, command, args):
             break
+        display_field(game_state)
 
     if game_state.game_over:
         print("GAME OVER")
