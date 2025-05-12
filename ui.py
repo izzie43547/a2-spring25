@@ -17,11 +17,6 @@ def display_field(game_state: GameState) -> None:
         for r, c, color in game_state.faller['segments']:
             faller_segments[(r, c)] = color
 
-    # Check for level cleared condition
-    if not game_state.has_viruses():
-        print("LEVEL CLEARED")
-        return
-
     for r in range(rows):
         row_str = "|"
         for c in range(cols):
@@ -37,7 +32,7 @@ def display_field(game_state: GameState) -> None:
                     else:
                         row_str += f"-{color}]"
                 else:
-                    row_str += f"[{color}]"
+                    row_str += f" {color} "
             # Handle empty cell
             elif cell == ' ':
                 row_str += "   "
@@ -62,8 +57,8 @@ def display_field(game_state: GameState) -> None:
         row_str += "|"
         print(row_str)
     
-    # Bottom border
-    print(" " + "-" * (cols * 3 + 2))
+    # Bottom border - exactly 12 dashes for 4 columns with one leading and one trailing space
+    print(" " + "-" * (3 * cols) + " ")
     
     # Level cleared message if no viruses left
     if not game_state.has_viruses():
