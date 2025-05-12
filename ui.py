@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional
 
 def display_field(game_state: GameState) -> None:
     """
-    Displays the current state of the game field.
+    Displays the current state of the game field in the expected format.
 
     Args:
         game_state (GameState): The current game state.
@@ -17,41 +17,55 @@ def display_field(game_state: GameState) -> None:
         for r, c, color in game_state.faller['segments']:
             faller_segments[(r, c)] = color
 
+    # Check for level cleared condition
+    if not game_state.has_viruses():
+        print("LEVEL CLEARED")
+        return
+
     for r in range(rows):
         row_str = "|"
         for c in range(cols):
             cell = game_state.field[r][c]
+            
+            # Handle falling piece display
             if (r, c) in faller_segments:
                 color = faller_segments[(r, c)]
                 if game_state.faller['orientation'] == 'horizontal':
                     left_c = min(fc for _, fc, _ in game_state.faller['segments'])
                     if c == left_c:
-                        row_str += f"[{color}-"
+                        row_str += f"[{color}--"
                     else:
                         row_str += f"-{color}]"
                 else:
                     row_str += f"[{color}]"
+            # Handle empty cell
             elif cell == ' ':
                 row_str += "   "
+            # Handle single color cell (landed)
             elif len(cell) == 1 and cell.isupper():
                 row_str += f" {cell} "
-            elif cell.startswith('L') and len(cell) == 2:
-                row_str += f"|{cell[1]}-"
-            elif cell.startswith('R') and len(cell) == 2:
-                row_str += f"-{cell[1]}|"
+            # Handle left side of horizontal piece
+            elif len(cell) == 2 and cell[0] == 'L' and cell[1] in 'RBY':
+                row_str += f"|{cell[1]}"
+            # Handle right side of horizontal piece
+            elif len(cell) == 2 and cell[0] == 'R' and cell[1] in 'RBY':
+                row_str += f"{cell[1]}|"
+            # Handle virus (lowercase)
             elif len(cell) == 1 and cell.islower():
                 row_str += f" {cell} "
+            # Handle matched cells (marked for removal)
             elif len(cell) == 3 and cell.startswith('*') and cell.endswith('*'):
                 row_str += f"*{cell[1]}*"
-            elif len(cell) == 2 and cell[0] in ('L', 'R') and cell[1].isupper():
-                row_str += f"{cell[0]}{cell[1]}{cell[0]}" if cell[0] == '|' else f"{cell[0]}{cell[1]}{cell[0]}"
-            elif len(cell) == 1 and cell.isupper():
-                row_str += f"|{cell}|"
+            # Fallback for other cases
             else:
                 row_str += "   "
         row_str += "|"
         print(row_str)
-    print("-" * (3 * cols) + " ")
+    
+    # Bottom border
+    print(" " + "-" * (cols * 3 + 2))
+    
+    # Level cleared message if no viruses left
     if not game_state.has_viruses():
         print("LEVEL CLEARED")
 
@@ -83,6 +97,21 @@ def parse_command(command: str) -> Tuple[str, Optional[List[str]]]:
         print("Invalid command format. Use proper spacing between arguments.")
         return "", None
 
+def show_help() -> None:
+    """Displays help information about available commands."""
+    print("\n=== DR. MARIO COMMANDS ===")
+    print("F <color1> <color2> - Create a new faller with two colored segments")
+    print("                       Colors must be R (red), B (blue), or Y (yellow)")
+    print("< or >              - Move faller left or right")
+    print("A or B              - Rotate faller left (A) or right (B)")
+    print("V <row> <col> <color> - Add a virus at specified position")
+    print("                       Row and column are 0-based indices")
+    print("<enter>             - Apply gravity (make pieces fall)")
+    print("Q                   - Quit the game")
+    print("H                   - Show this help")
+    print("=======================\n")
+    input("Press Enter to continue...")
+
 def handle_command(game_state: GameState, command: str, args: Optional[List[str]]) -> bool:
     """
     Handles the user command and updates the game state.
@@ -96,71 +125,125 @@ def handle_command(game_state: GameState, command: str, args: Optional[List[str]
         bool: True if the game should continue, False if it should end.
     """
     if game_state.game_over:
+        print("GAME OVER - No more moves possible!")
         return False
         
-    if command == 'Q':
-        return False
-    elif command == 'F':
-        if args and len(args) == 2 and all(c in 'RBY' for c in args):
-            game_state.create_faller(args[0], args[1])
-        else:
-            print("Invalid F command format. Use 'F <color1> <color2>'.")
-    elif command == 'A':
-        game_state.rotate_faller('A')
-    elif command == 'B':
-        game_state.rotate_faller('B')
-    elif command == '<':
-        game_state.move_faller('<')
-    elif command == '>':
-        game_state.move_faller('>')
-    elif command == 'V':
-        if args and len(args) == 3:
+    try:
+        if command == 'Q':
+            print("Thanks for playing!")
+            return False
+            
+        elif command == 'H':
+            show_help()
+            return True
+            
+        elif command == 'F':
+            if not args or len(args) != 2 or not all(c.upper() in 'RBY' for c in args):
+                raise ValueError("Invalid F command. Use 'F <color1> <color2>' where colors are R, B, or Y.")
+            if game_state.faller is not None:
+                raise ValueError("A faller already exists. Move or rotate it first.")
+            if not game_state.create_faller(args[0].upper(), args[1].upper()):
+                game_state.game_over = True
+                print("Game Over - No space for new faller!")
+                return False
+                
+        elif command in ('A', 'B'):
+            if game_state.faller is None:
+                raise ValueError("No active faller. Create one with 'F <color1> <color2>'")
+            game_state.rotate_faller(command)
+            
+        elif command in ('<', '>'):
+            if game_state.faller is None:
+                raise ValueError("No active faller. Create one with 'F <color1> <color2>'")
+            game_state.move_faller(command)
+            
+        elif command == 'V':
+            if not args or len(args) != 3:
+                raise ValueError("Invalid V command. Use 'V <row> <col> <color>'")
             try:
                 row = int(args[0])
                 col = int(args[1])
-                color = args[2].lower()  # Convert to lowercase for validation
-                if color in 'rby':
-                    game_state.add_virus(row, col, color)
-                else:
-                    print("Invalid virus color. Use 'r', 'R', 'b', 'B', 'y', or 'Y'.")
-            except ValueError:
-                print("Invalid V command arguments. Use 'V <row> <col> <color>'.")
+                color = args[2].lower()
+                if color[0] not in 'rby':
+                    raise ValueError("Color must be r, b, or y")
+                game_state.add_virus(row, col, color)
+            except ValueError as e:
+                raise ValueError(f"Invalid virus placement: {e}")
+                
+        elif command == '':
+            game_state.apply_gravity()
+            
         else:
-            print("Invalid V command format. Use 'V <row> <col> <color>'.")
-    elif command == '':
-        game_state.apply_gravity()
-    else:
-        print(f"Unknown command: {command}")
+            print(f"Unknown command: {command}")
+            print("Type 'H' for help with commands.")
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        print("Type 'H' for help with commands.")
+        input("Press Enter to continue...")
+        
     return True
+
+def show_welcome() -> None:
+    """Displays the welcome message and game instructions."""
+    print("=" * 50)
+    print("DR. MARIO".center(50))
+    print("=" * 50)
+    print("\nWelcome to Dr. Mario!")
+    print("\nGAME OBJECTIVE:")
+    print("  - Clear all viruses by matching 4 or more of the same color")
+    print("  - Create matches horizontally, vertically, or diagonally")
+    print("  - Use the controls to move and rotate falling capsules")
+    print("\nType 'H' during the game for help with commands.")
+    print("-" * 50)
 
 def run_game() -> None:
     """
-    Runs the Dr. Mario game.
+    Runs the Dr. Mario game with the expected test output format.
     """
-    rows = int(input())
-    cols = int(input())
-    initial_config_type = input().upper()
-
-    initial_field = None
-    if initial_config_type == 'CONTENTS':
-        initial_field = [input() for _ in range(rows)]
-    elif initial_config_type == 'EMPTY':
-        pass
-    else:
-        print("Invalid initial configuration type.")
+    # Read game configuration from input
+    try:
+        # Read rows and columns
+        rows = int(input())
+        cols = int(input())
+        
+        # Read initial configuration type
+        config = input().strip().upper()
+        
+        initial_field = None
+        if config == 'CONTENTS':
+            initial_field = []
+            for _ in range(rows):
+                row = input().strip()
+                initial_field.append(row.upper() if row.strip() else ' ' * cols)
+        
+        # Initialize game state
+        game_state = GameState(rows, cols, initial_field)
+        
+        # Main game loop
+        while True:
+            # Display current game state
+            display_field(game_state)
+            
+            # Check for win/lose conditions
+            if game_state.game_over or not game_state.has_viruses():
+                break
+                
+            # Get and process user input
+            command_str = get_user_command()
+            command, args = parse_command(command_str)
+            
+            # Handle quit command
+            if command == 'Q' or not handle_command(game_state, command, args):
+                break
+                
+    except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
         return
-
-    game_state = GameState(rows, cols, initial_field)
-
-    while not game_state.game_over:
-        display_field(game_state)
-        command_str = get_user_command()
-        command, args = parse_command(command_str)
-        if not handle_command(game_state, command, args):
-            break
-
-    if game_state.game_over:
-        print("GAME OVER")
+    except Exception as e:
+        # Print error and exit on any other exception
+        print(f"Error: {e}", file=sys.stderr)
+        return
 
 if __name__ == '__main__':
     run_game()

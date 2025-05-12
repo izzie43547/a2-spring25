@@ -45,21 +45,75 @@ class GameState:
         Args:
             color1 (str): The color of the left/top segment ('R', 'B', or 'Y').
             color2 (str): The color of the right/bottom segment ('R', 'B', or 'Y').
-        """
-        if self.faller:
-            return
             
-        middle_cols = [self.cols // 2] if self.cols % 2 == 1 else [self.cols // 2 - 1, self.cols // 2]
-        for col in middle_cols:
-            if self.field[0][col] != ' ':
+        Returns:
+            bool: True if faller was created, False if game over
+        """
+        if self.game_over:
+            return False
+            
+        if self.faller:
+            return False
+            
+        # Determine middle columns for faller placement
+        if self.cols % 2 == 1:
+            # Odd number of columns - single middle column
+            middle_col = self.cols // 2
+            # Check if there's space for a horizontal faller
+            if (middle_col > 0 and self.field[0][middle_col-1] == ' ' and 
+                middle_col < self.cols-1 and self.field[0][middle_col+1] == ' '):
+                # Can place horizontal faller
+                self.faller = {
+                    'segments': [(0, middle_col-1, color1), (0, middle_col, color2)],
+                    'orientation': 'horizontal',
+                    'landed': False
+                }
+            elif self.field[0][middle_col] == ' ' and self.rows > 1 and self.field[1][middle_col] == ' ':
+                # Can place vertical faller
+                self.faller = {
+                    'segments': [(0, middle_col, color1), (1, middle_col, color2)],
+                    'orientation': 'vertical',
+                    'landed': False
+                }
+            else:
                 self.game_over = True
-                return
+                return False
+        else:
+            # Even number of columns - two middle columns
+            left_col = self.cols // 2 - 1
+            right_col = self.cols // 2
+            
+            # Check if there's space for a horizontal faller
+            if (self.field[0][left_col] == ' ' and self.field[0][right_col] == ' ' and
+                (left_col == 0 or self.field[0][left_col-1] == ' ') and
+                (right_col == self.cols-1 or self.field[0][right_col+1] == ' ')):
+                # Can place horizontal faller
+                self.faller = {
+                    'segments': [(0, left_col, color1), (0, right_col, color2)],
+                    'orientation': 'horizontal',
+                    'landed': False
+                }
+            # Check if there's space for a vertical faller on the left
+            elif (self.field[0][left_col] == ' ' and self.rows > 1 and 
+                  self.field[1][left_col] == ' '):
+                self.faller = {
+                    'segments': [(0, left_col, color1), (1, left_col, color2)],
+                    'orientation': 'vertical',
+                    'landed': False
+                }
+            # Check if there's space for a vertical faller on the right
+            elif (self.field[0][right_col] == ' ' and self.rows > 1 and 
+                  self.field[1][right_col] == ' '):
+                self.faller = {
+                    'segments': [(0, right_col, color1), (1, right_col, color2)],
+                    'orientation': 'vertical',
+                    'landed': False
+                }
+            else:
+                self.game_over = True
+                return False
                 
-        self.faller = {
-            'segments': [(0, middle_cols[0], color1), (0, middle_cols[-1], color2)],
-            'orientation': 'horizontal',
-            'landed': False
-        }
+        return True
 
     def _can_move(self, faller_segments: List[Tuple[int, int, str]], dx: int = 0, dy: int = 0) -> bool:
         """
@@ -95,67 +149,91 @@ class GameState:
 
     def _rotate_clockwise(self) -> None:
         """
-        Rotates the faller clockwise.
+        Rotates the faller clockwise with wall kick support.
         """
-        if self.faller:
-            segments = self.faller['segments']
-            orientation = self.faller['orientation']
-            r_pivot, c_pivot, _ = segments[1] # Bottom-left is the pivot in the 2x2 grid
+        if not self.faller:
+            return
+            
+        segments = self.faller['segments']
+        orientation = self.faller['orientation']
+        r_pivot, c_pivot, _ = segments[1]  # Bottom-left is the pivot in the 2x2 grid
 
-            if orientation == 'horizontal':
-                # Become vertical
-                new_segments = [(r_pivot - 1, c_pivot, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
-                if self._can_move(new_segments):
-                    self.faller['segments'] = new_segments
+        if orientation == 'horizontal':
+            # Try normal rotation first (becoming vertical)
+            new_segments = [(r_pivot - 1, c_pivot, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                self.faller['orientation'] = 'vertical'
+                return
+                
+            # Left wall kick
+            new_segments_left = [(r, c - 1, color) for r, c, color in segments]
+            if self._can_move(new_segments_left):
+                rotated_segments = [(r_pivot - 1, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot - 1, segments[1][2])]
+                if self._can_move(rotated_segments):
+                    self.faller['segments'] = rotated_segments
                     self.faller['orientation'] = 'vertical'
-                else:
-                    # Wall kick: try moving left then rotating
-                    new_segments_left = [(r, c - 1, color) for r, c, color in segments]
-                    if self._can_move(new_segments_left):
-                        rotated_segments = [(r_pivot - 1, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot - 1, segments[1][2])]
-                        if self._can_move(rotated_segments):
-                            self.faller['segments'] = rotated_segments
-                            self.faller['orientation'] = 'vertical'
-                            return # Rotation successful after wall kick
+                    return
+                    
+            # Right wall kick
+            new_segments_right = [(r, c + 1, color) for r, c, color in segments]
+            if self._can_move(new_segments_right):
+                rotated_segments = [(r_pivot - 1, c_pivot + 1, segments[0][2]), (r_pivot, c_pivot + 1, segments[1][2])]
+                if self._can_move(rotated_segments):
+                    self.faller['segments'] = rotated_segments
+                    self.faller['orientation'] = 'vertical'
+                    return
 
-            elif orientation == 'vertical':
-                # Become horizontal
-                new_segments = [(r_pivot, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
-                if self._can_move(new_segments):
-                    self.faller['segments'] = new_segments
-                    self.faller['orientation'] = 'horizontal'
+        elif orientation == 'vertical':
+            # Try normal rotation first (becoming horizontal)
+            new_segments = [(r_pivot, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                self.faller['orientation'] = 'horizontal'
 
     def _rotate_counterclockwise(self) -> None:
         """
-        Rotates the faller counterclockwise.
+        Rotates the faller counterclockwise with wall kick support.
         """
-        if self.faller:
-            segments = self.faller['segments']
-            orientation = self.faller['orientation']
-            r_pivot, c_pivot, _ = segments[1] # Bottom-left is the pivot
+        if not self.faller:
+            return
+            
+        segments = self.faller['segments']
+        orientation = self.faller['orientation']
+        r_pivot, c_pivot, _ = segments[1]  # Bottom-left is the pivot
 
-            if orientation == 'horizontal':
-                # Become vertical
-                new_segments = [(r_pivot - 1, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot - 1, segments[1][2])]
-                if self._can_move(new_segments):
-                    self.faller['segments'] = new_segments
+        if orientation == 'horizontal':
+            # Try normal rotation first (becoming vertical)
+            new_segments = [(r_pivot - 1, c_pivot - 1, segments[0][2]), (r_pivot, c_pivot - 1, segments[1][2])]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                self.faller['orientation'] = 'vertical'
+                return
+                
+            # Left wall kick
+            new_segments_left = [(r, c - 1, color) for r, c, color in segments]
+            if self._can_move(new_segments_left):
+                rotated_segments = [(r_pivot - 1, c_pivot - 2, segments[0][2]), (r_pivot, c_pivot - 2, segments[1][2])]
+                if self._can_move(rotated_segments):
+                    self.faller['segments'] = rotated_segments
                     self.faller['orientation'] = 'vertical'
-                else:
-                    # Wall kick (same logic as clockwise for this assignment)
-                    new_segments_left = [(r, c - 1, color) for r, c, color in segments]
-                    if self._can_move(new_segments_left):
-                        rotated_segments = [(r_pivot - 1, c_pivot - 2, segments[0][2]), (r_pivot, c_pivot - 2, segments[1][2])]
-                        if self._can_move(rotated_segments):
-                            self.faller['segments'] = rotated_segments
-                            self.faller['orientation'] = 'vertical'
-                            return
+                    return
+                    
+            # Right wall kick
+            new_segments_right = [(r, c + 1, color) for r, c, color in segments]
+            if self._can_move(new_segments_right):
+                rotated_segments = [(r_pivot - 1, c_pivot, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
+                if self._can_move(rotated_segments):
+                    self.faller['segments'] = rotated_segments
+                    self.faller['orientation'] = 'vertical'
+                    return
 
-            elif orientation == 'vertical':
-                # Become horizontal
-                new_segments = [(r_pivot, c_pivot, segments[0][2]), (r_pivot, c_pivot + 1, segments[1][2])]
-                if self._can_move(new_segments):
-                    self.faller['segments'] = new_segments
-                    self.faller['orientation'] = 'horizontal'
+        elif orientation == 'vertical':
+            # Try normal rotation first (becoming horizontal)
+            new_segments = [(r_pivot, c_pivot, segments[0][2]), (r_pivot, c_pivot + 1, segments[1][2])]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                self.faller['orientation'] = 'horizontal'
 
     def rotate_faller(self, direction: str) -> None:
         """
@@ -173,144 +251,234 @@ class GameState:
     def apply_gravity(self) -> None:
         """
         Applies gravity to the current faller or any floating capsule segments.
+        Processes matches after each gravity application.
         """
-        if self.faller:
-            if not self.faller['landed']:
-                new_segments = [(r + 1, c, color) for r, c, color in self.faller['segments']]
-                if self._can_move(new_segments):
-                    self.faller['segments'] = new_segments
-                else:
-                    self.faller['landed'] = True
-                    for r, c, color in self.faller['segments']:
-                        # Mark the landed faller segments in the field
-                        if self.faller['orientation'] == 'horizontal':
-                            left_c = min(c1 for _, c1, _ in self.faller['segments'])
-                            if c == left_c:
-                                self.field[r][c] = f'L{color}' # Left horizontal
-                            else:
-                                self.field[r][c] = f'R{color}' # Right horizontal
-                        else:
-                            self.field[r][c] = color # Vertical is treated as single segments upon landing
-                    self.faller = None
-                    self._process_matches()
-                    self._apply_field_gravity()
+        if self.game_over:
+            return
+            
+        moved = False
+        
+        # Handle falling of the current faller
+        if self.faller and not self.faller['landed']:
+            new_segments = [(r + 1, c, color) for r, c, color in self.faller['segments']]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                moved = True
             else:
-                self._apply_field_gravity() # Apply gravity to any floating pieces
-                self._process_matches()
+                # Faller has landed
+                self.faller['landed'] = True
+                # Place the faller on the field
+                for r, c, color in self.faller['segments']:
+                    if self.faller['orientation'] == 'horizontal':
+                        left_c = min(c1 for _, c1, _ in self.faller['segments'])
+                        if c == left_c:
+                            self.field[r][c] = f'L{color}'  # Left horizontal
+                        else:
+                            self.field[r][c] = f'R{color}'  # Right horizontal
+                    else:
+                        self.field[r][c] = color  # Vertical is treated as single segments upon landing
+                self.faller = None
+                moved = True
+        
+        # Process gravity and matches in a loop to handle cascading effects
+        while True:
+            # Apply gravity to the field
+            field_moved = self._apply_field_gravity()
+            
+            # Process any matches that result from gravity
+            matches_found = self._process_matches()
+            
+            # If nothing moved and no matches were made, we're done
+            if not field_moved and not matches_found and not moved:
+                break
+                
+            moved = True  # Something changed, continue checking for more matches
+            
+            # If we found matches, apply gravity again to fill in the gaps
+            if matches_found:
+                self._apply_field_gravity()
 
-        else:
-            self._apply_field_gravity()
-            self._process_matches()
-
-    def _apply_field_gravity(self) -> None:
+    def _apply_field_gravity(self) -> bool:
         """
-        Applies gravity to the entire field.
+        Applies gravity to all cells in the field, making them fall down if there's space below them.
+        
+        Returns:
+            bool: True if any cell moved, False otherwise
         """
-        # Apply gravity bottom-up for better stability
-        for r in range(self.rows-1, -1, -1):
-            for c in range(self.cols):
-                if self.field[r][c] != ' ':
-                    # Skip viruses as they are not affected by gravity
-                    if isinstance(self.field[r][c], str) and self.field[r][c].islower():
-                        continue
-                        
-                    # Find the lowest empty cell below this one
-                    lowest_empty = r
+        moved = False
+        
+        # Process from bottom to top, right to left
+        for r in range(self.rows - 2, -1, -1):  # Start from second to last row, go up to top
+            for c in range(self.cols - 1, -1, -1):
+                cell = self.field[r][c]
+                
+                # Skip empty cells and cells that are part of the current faller
+                if (cell == ' ' or 
+                    (isinstance(cell, str) and cell.startswith(('L', 'R'))) or
+                    (isinstance(cell, str) and cell.startswith('*'))):
+                    continue
+                
+                # Check if the cell can fall
+                if r < self.rows - 1 and self.field[r + 1][c] == ' ':
+                    # Find the lowest empty cell below
+                    lowest_empty = r + 1
                     while lowest_empty < self.rows - 1 and self.field[lowest_empty + 1][c] == ' ':
                         lowest_empty += 1
                     
-                    if lowest_empty != r:
-                        # Move the piece down
-                        self.field[lowest_empty][c] = self.field[r][c]
-                        self.field[r][c] = ' '
+                    # Move the cell down
+                    self.field[lowest_empty][c] = self.field[r][c]
+                    self.field[r][c] = ' '
+                    moved = True
+        
+        return moved
 
     def add_virus(self, row: int, col: int, color: str) -> None:
         """
-        Adds a virus to the specified cell.
+        Adds a virus to the specified cell if the cell is empty.
 
         Args:
             row (int): The row index (0-based).
             col (int): The column index (0-based).
             color (str): The color of the virus ('r', 'R', 'b', 'B', 'y', or 'Y').
+            
+        Raises:
+            ValueError: If the cell is already occupied or color is invalid.
         """
-        if 0 <= row < self.rows and 0 <= col < self.cols:
-            self.field[row][col] = color.lower()  # Store virus colors as lowercase
+        if not (0 <= row < self.rows and 0 <= col < self.cols):
+            raise ValueError(f"Position ({row}, {col}) is out of bounds")
+            
+        if self.field[row][col] != ' ':
+            raise ValueError(f"Cell at position ({row}, {col}) is already occupied")
+            
+        color_lower = color.lower()
+        if color_lower not in ['r', 'b', 'y']:
+            raise ValueError(f"Invalid virus color: {color}. Must be 'r', 'b', or 'y' (case insensitive)")
+            
+        self.field[row][col] = color_lower  # Store virus colors as lowercase
 
-    def _check_match(self, r: int, c: int) -> List[Tuple[int, int]]:
+    def _check_match(self, row: int, col: int) -> List[Tuple[int, int]]:
         """
-        Checks for matches of 4 or more in horizontal and vertical directions from a given cell.
-
+        Checks for matches of 4 or more in horizontal, vertical, and diagonal directions
+        from the given cell.
+        
         Args:
-            r (int): The row index.
-            c (int): The column index.
+            row (int): The row index.
+            col (int): The column index.
 
         Returns:
             List[Tuple[int, int]]: A list of coordinates that are part of a match.
         """
-        matched = []
-        color = self.field[r][c][0].upper() if self.field[r][c].isalpha() else None
-        if not color:
-            return matched
-
-        # Horizontal check
-        horizontal_match = [(r, c)]
-        # Check left
-        for i in range(c - 1, -1, -1):
-            if self.field[r][i][0].upper() == color:
-                horizontal_match.append((r, i))
+        cell = self.field[row][col]
+        if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
+            return []
+            
+        # Extract base color (handles both single-char colors and marked cells)
+        if isinstance(cell, str):
+            if len(cell) > 1 and cell[0] in 'LR':
+                # Handle faller segments (e.g., 'Lr', 'Rb')
+                color = cell[1].upper()
             else:
-                break
-        # Check right
-        for i in range(c + 1, self.cols):
-            if self.field[r][i][0].upper() == color:
-                horizontal_match.append((r, i))
-            else:
-                break
-        if len(horizontal_match) >= 4:
-            matched.extend(horizontal_match)
+                # Handle single characters and marked cells
+                color = cell[-1].upper() if len(cell) > 1 else cell.upper()
+        else:
+            color = str(cell).upper()
+            
+        if color not in 'RBY':
+            return []
+            
+        matched = set()
+        
+        # Directions: (dr, dc) for horizontal, vertical, and both diagonals
+        directions = [
+            [(0, 1), (0, -1)],   # Horizontal
+            [(1, 0), (-1, 0)],    # Vertical
+            [(1, 1), (-1, -1)],   # Diagonal down-right
+            [(1, -1), (-1, 1)]    # Diagonal down-left
+        ]
+        
+        for direction_pair in directions:
+            # Count matching cells in both directions of the pair
+            count = 1  # Start with the current cell
+            cells = [(row, col)]
+            
+            for dr, dc in direction_pair:
+                r, c = row + dr, col + dc
+                while 0 <= r < self.rows and 0 <= c < self.cols:
+                    cell = self.field[r][c]
+                    if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
+                        break
+                        
+                    # Extract the cell's color
+                    cell_color = None
+                    if isinstance(cell, str):
+                        if len(cell) > 1 and cell[0] in 'LR':
+                            cell_color = cell[1].upper()
+                        else:
+                            cell_color = cell[-1].upper() if len(cell) > 1 else cell.upper()
+                    else:
+                        cell_color = str(cell).upper()
+                    
+                    if cell_color == color:
+                        count += 1
+                        cells.append((r, c))
+                        r += dr
+                        c += dc
+                    else:
+                        break
+            
+            # If we found 4 or more in a line (including the starting cell)
+            if count >= 4:
+                matched.update(cells)
+        
+        return list(matched)
 
-        # Vertical check
-        vertical_match = [(r, c)]
-        # Check up
-        for i in range(r - 1, -1, -1):
-            if self.field[i][c][0].upper() == color:
-                vertical_match.append((i, c))
-            else:
-                break
-        # Check down
-        for i in range(r + 1, self.rows):
-            if self.field[i][c][0].upper() == color:
-                vertical_match.append((i, c))
-            else:
-                break
-        if len(vertical_match) >= 4:
-            matched.extend(vertical_match)
-
-        return list(set(matched)) # Remove duplicates
-
-    def _process_matches(self) -> None:
+    def _process_matches(self) -> bool:
         """
-        Checks the entire field for matches and marks them for removal.
+        Checks the entire field for matches, marks them for removal, and removes them.
+        
+        Returns:
+            bool: True if any matches were found and removed, False otherwise
         """
         matched_cells = set()
+        
+        # First pass: find all matches
         for r in range(self.rows):
             for c in range(self.cols):
-                if self.field[r][c] != ' ':
-                    matches = self._check_match(r, c)
-                    if matches:
-                        matched_cells.update(matches)
-
-        # Mark matched cells
+                cell = self.field[r][c]
+                # Skip empty cells and already matched cells
+                if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
+                    continue
+                    
+                # Check for matches from this cell
+                matches = self._check_match(r, c)
+                if matches:
+                    matched_cells.update(matches)
+        
+        if not matched_cells:
+            return False  # No matches found
+            
+        # Mark matched cells for removal
         for r, c in matched_cells:
-            self.field[r][c] = f'*{self.field[r][c]}*'
-
-        # Remove matched cells
+            cell = self.field[r][c]
+            # Only mark if not already marked
+            if not (isinstance(cell, str) and cell.startswith('*')):
+                # Preserve the original color when marking
+                if isinstance(cell, str) and len(cell) > 1 and cell[0] in 'LR':
+                    # Handle faller segments (L/R markers)
+                    self.field[r][c] = f'*{cell[1]}*'
+                else:
+                    self.field[r][c] = f'*{cell}*'
+        
+        # Create a new field with matched cells removed
         new_field = [row[:] for row in self.field]
         for r in range(self.rows):
             for c in range(self.cols):
-                if self.field[r][c].startswith('*') and self.field[r][c].endswith('*'):
+                cell = self.field[r][c]
+                if isinstance(cell, str) and cell.startswith('*') and cell.endswith('*'):
                     new_field[r][c] = ' '
+        
         self.field = new_field
+        return True  # Matches were found and processed
 
     def has_viruses(self) -> bool:
         """
@@ -321,7 +489,12 @@ class GameState:
         """
         for row in self.field:
             for cell in row:
-                if cell.islower():
-                    return True
+                if isinstance(cell, str):
+                    # Check for lowercase letter (virus) in the cell
+                    # Handle marked cells (e.g., '*r*') and faller segments (e.g., 'Lr')
+                    if (cell.islower() or  # Single lowercase character
+                        (len(cell) > 1 and cell[-1].islower()) or  # Last character is lowercase (e.g., '*r*' or 'Lr')
+                        (len(cell) > 2 and cell[1].islower())):  # Middle character is lowercase (e.g., '*r*')
+                        return True
         return False
     
