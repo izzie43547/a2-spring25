@@ -30,24 +30,30 @@ def display_field(game_state: GameState) -> None:
                     if c == left_c:
                         row_str += f"[{color}--"
                     else:
-                        row_str += f"-{color}]"
+                        row_str += f"{color}]"
                 else:
                     row_str += f" {color} "
             # Handle empty cell
             elif cell == ' ':
                 row_str += "   "
-            # Handle single color cell (landed)
-            elif len(cell) == 1 and cell.isupper():
-                row_str += f" {cell} "
-            # Handle left side of horizontal piece
-            elif len(cell) == 2 and cell[0] == 'L' and cell[1] in 'RBY':
-                row_str += f"|{cell[1]}"
-            # Handle right side of horizontal piece
-            elif len(cell) == 2 and cell[0] == 'R' and cell[1] in 'RBY':
-                row_str += f"{cell[1]}|"
-            # Handle virus (lowercase)
-            elif len(cell) == 1 and cell.islower():
-                row_str += f" {cell} "
+            # Handle matched cells (marked with asterisks)
+            elif isinstance(cell, str) and len(cell) >= 3 and cell[0] == '*' and cell[-1] == '*':
+                row_str += f"*{cell[1]}*"
+            # Handle virus or single color cell (preserve case)
+            elif len(cell) == 1 and cell.upper() in ['R', 'B', 'Y']:
+                # Check if this cell is part of a match
+                if game_state._check_match(r, c):  
+                    row_str += f"*{cell}*"
+                else:
+                    row_str += f" {cell} "
+            # Handle horizontal pieces
+            elif isinstance(cell, str) and len(cell) == 2 and cell[0] in 'LR' and cell[1] in 'RBY':
+                if cell[0] == 'L':
+                    # Left side of horizontal piece
+                    row_str += f"|{cell[1]}"
+                else:
+                    # Right side of horizontal piece
+                    row_str += f"{cell[1]}|"
             # Handle matched cells (marked for removal)
             elif len(cell) == 3 and cell.startswith('*') and cell.endswith('*'):
                 row_str += f"*{cell[1]}*"
@@ -57,10 +63,10 @@ def display_field(game_state: GameState) -> None:
         row_str += "|"
         print(row_str)
     
-    # Bottom border - exactly 12 dashes for 4 columns with one leading and one trailing space
-    print(" " + "-" * (3 * cols) + " ")
+    # Print bottom border
+    print(" " + "-" * (cols * 3) + " ")
     
-    # Level cleared message if no viruses left
+    # Check for level cleared
     if not game_state.has_viruses():
         print("LEVEL CLEARED")
 
@@ -240,6 +246,8 @@ def run_game() -> None:
         print(f"Error: {e}", file=sys.stderr)
         return
 
+# Export required functions for a2.py
+__all__ = ['display_field', 'handle_command', 'parse_command']
+
 if __name__ == '__main__':
     run_game()
-    
