@@ -12,58 +12,47 @@ def display_field(game_state: GameState) -> None:
         game_state (GameState): The current game state.
     """
     rows, cols = game_state.get_dimensions()
-    faller_segments = {}
-    if game_state.faller:
-        for r, c, color in game_state.faller['segments']:
-            faller_segments[(r, c)] = color
-
+    
+    # Print top border with proper spacing
+    print("|" + " " * (cols * 3 - 1) + "|")
+    
     for r in range(rows):
         row_str = "|"
         for c in range(cols):
             cell = game_state.field[r][c]
             
-            # Handle falling piece display
-            if (r, c) in faller_segments:
-                color = faller_segments[(r, c)]
-                if game_state.faller['orientation'] == 'horizontal':
-                    left_c = min(fc for _, fc, _ in game_state.faller['segments'])
-                    if c == left_c:
-                        row_str += f"[{color}--"
-                    else:
-                        row_str += f"{color}]"
-                else:
-                    row_str += f" {color} "
             # Handle empty cell
-            elif cell == ' ':
+            if cell == ' ':
                 row_str += "   "
-            # Handle matched cells (marked with asterisks)
-            elif isinstance(cell, str) and len(cell) >= 3 and cell[0] == '*' and cell[-1] == '*':
+            # Handle marked cells (for removal)
+            elif isinstance(cell, str) and cell.startswith('*'):
                 row_str += f"*{cell[1]}*"
-            # Handle virus or single color cell (preserve case)
-            elif len(cell) == 1 and cell.upper() in ['R', 'B', 'Y']:
-                # Check if this cell is part of a match
-                if game_state._check_match(r, c):  
-                    row_str += f"*{cell}*"
-                else:
-                    row_str += f" {cell} "
             # Handle horizontal pieces
-            elif isinstance(cell, str) and len(cell) == 2 and cell[0] in 'LR' and cell[1] in 'RBY':
+            elif isinstance(cell, str) and len(cell) == 2 and cell[0] in 'LR':
                 if cell[0] == 'L':
-                    # Left side of horizontal piece
                     row_str += f"|{cell[1]}"
+                    if c + 1 < cols and isinstance(game_state.field[r][c+1], str) and len(game_state.field[r][c+1]) == 2 and game_state.field[r][c+1][0] == 'R':
+                        row_str += f"{game_state.field[r][c+1][1]}|"
+                    else:
+                        row_str += " |"
+                    c += 1  # Skip the next cell
                 else:
-                    # Right side of horizontal piece
                     row_str += f"{cell[1]}|"
-            # Handle matched cells (marked for removal)
-            elif len(cell) == 3 and cell.startswith('*') and cell.endswith('*'):
-                row_str += f"*{cell[1]}*"
-            # Fallback for other cases
+            # Handle single character cells (viruses or colors)
             else:
-                row_str += "   "
-        row_str += "|"
+                if isinstance(cell, str) and cell.islower():  # Virus
+                    row_str += f" {cell} "
+                else:  # Regular color block
+                    row_str += f" {cell} "
+        
+        # Ensure the row has the correct width and ends with a |
+        while len(row_str) < cols * 3 + 1:
+            row_str += " "
+        if not row_str.endswith('|'):
+            row_str = row_str.rstrip() + "|"
         print(row_str)
     
-    # Print bottom border
+    # Print bottom border with proper spacing
     print(" " + "-" * (cols * 3) + " ")
     
     # Check for level cleared

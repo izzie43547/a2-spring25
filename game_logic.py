@@ -308,10 +308,10 @@ class GameState:
                     continue
                     
                 # Handle horizontal pieces
-                if isinstance(cell, str) and len(cell) == 2 and cell[0] in 'LR':
+                is_horizontal = isinstance(cell, str) and len(cell) == 2 and cell[0] in 'LR'
+                if is_horizontal and cell[0] != 'L':
                     # Only process the left part of horizontal pieces to avoid double-processing
-                    if cell[0] != 'L':
-                        continue
+                    continue
                 
                 # Check if the cell can fall
                 if r < self.rows - 1 and self.field[r + 1][c] == ' ':
@@ -321,17 +321,22 @@ class GameState:
                         lowest_empty += 1
                     
                     # Move the cell down
-                    self.field[lowest_empty][c] = self.field[r][c]
+                    cell_to_move = self.field[r][c]
+                    self.field[lowest_empty][c] = cell_to_move
                     self.field[r][c] = ' '
                     moved = True
                     
                     # If this is part of a horizontal piece, move the other part as well
-                    if isinstance(self.field[lowest_empty][c], str) and len(self.field[lowest_empty][c]) == 2 and self.field[lowest_empty][c][0] in 'LR':
+                    if is_horizontal:
                         # Find the other part of the horizontal piece
-                        other_c = c + 1 if self.field[lowest_empty][c][0] == 'L' else c - 1
-                        if 0 <= other_c < self.cols and r < self.rows - 1 and self.field[r + 1][other_c] == ' ':
-                            # Move the other part down to the same row
-                            self.field[lowest_empty][other_c] = self.field[r][other_c]
+                        other_c = c + 1  # Since we only process 'L' part, other is always to the right
+                        if 0 <= other_c < self.cols and self.field[r][other_c] != ' ':
+                            # Find the lowest empty cell below for the other part
+                            other_lowest = r + 1
+                            while other_lowest < self.rows - 1 and self.field[other_lowest + 1][other_c] == ' ':
+                                other_lowest += 1
+                            # Move the other part down to the same row as the first part
+                            self.field[other_lowest][other_c] = self.field[r][other_c]
                             self.field[r][other_c] = ' '
                             moved = True
         
@@ -438,73 +443,115 @@ class GameState:
                 # Place the faller on the field
                 for r, c, color in self.faller['segments']:
                     if self.faller['orientation'] == 'horizontal':
-                        left_c = min(c1 for _, c1, _ in self.faller['segments'])
+                        left_c = min(fc for _, fc, _ in self.faller['segments'])
                         if c == left_c:
                             self.field[r][c] = f'L{color}'  # Left horizontal
+                        else:
+                            self.field[r][c] = f'R{color}'  # Right horizontal
                     else:
-                        self.field[r][c] = f'R{color}'  # Right horizontal
-                else:
-                    self.field[r][c] = color  # Vertical is treated as single segments upon landing
-        self.faller = None
-        moved = True
+                        self.field[r][c] = color  # Vertical is treated as single segments upon landing
+                self.faller = None
+                moved = True
         
-# Process gravity and matches in a loop to handle cascading effects
+        # Process gravity and matches in a loop to handle cascading effects
         while True:
+            # First, remove any cells marked for removal
+            removed_any = False
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
+                        self.field[r][c] = ' '
+                        removed_any = True
+            
             # Apply gravity to the field
             field_moved = self._apply_field_gravity()
             
             # Process any matches that result from gravity
             matches_found = self._process_matches()
             
-            # If nothing moved and no matches were made, we're done
-            if not field_moved and not matches_found and not moved:
-                break
-                        
-            moved = True  # Something changed, continue checking for more matches
-                    
-            # If we found matches, apply gravity again to fill in the gaps
+            # If we found matches, continue the loop to process them
             if matches_found:
+                moved = True
+                # Remove the matched cells immediately after processing
+                for r in range(self.rows):
+                    for c in range(self.cols):
+                        if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
+                            self.field[r][c] = ' '
+                # Apply gravity again after removing matches
                 field_moved = self._apply_field_gravity() or field_moved
+            # If we removed any cells or moved anything, continue the loop
+            elif removed_any or field_moved:
+                moved = True
+            # Otherwise, we're done
+            else:
+                break
+        
+        return moved
 
-    def _apply_field_gravity(self) -> bool:
+    def apply_gravity(self) -> None:
         """
-        Applies gravity to all cells in the field, making them fall down if there's space below them.
-            
-        Returns:
-            bool: True if any cell moved, False otherwise
+        Applies gravity to the current faller or any floating capsule segments.
+        Processes matches after each gravity application.
         """
+        if self.game_over:
+            return
+                        
         moved = False
                 
-        # Process from bottom to top, right to left
-        for r in range(self.rows - 2, -1, -1):  # Start from second to last row, go up to top
-            for c in range(self.cols - 1, -1, -1):
-                cell = self.field[r][c]
+        # Handle falling of the current faller
+        if self.faller and not self.faller['landed']:
+            new_segments = [(r + 1, c, color) for r, c, color in self.faller['segments']]
+            if self._can_move(new_segments):
+                self.faller['segments'] = new_segments
+                moved = True
+            else:
+                # Faller has landed
+                self.faller['landed'] = True
+                # Place the faller on the field
+                for r, c, color in self.faller['segments']:
+                    if self.faller['orientation'] == 'horizontal':
+                        left_c = min(fc for _, fc, _ in self.faller['segments'])
+                        if c == left_c:
+                            self.field[r][c] = f'L{color}'  # Left horizontal
+                        else:
+                            self.field[r][c] = f'R{color}'  # Right horizontal
+                    else:
+                        self.field[r][c] = color  # Vertical is treated as single segments upon landing
+                self.faller = None
+                moved = True
+            
+        # Process gravity and matches in a loop to handle cascading effects
+        while True:
+            # First, remove any cells marked for removal
+            removed_any = False
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
+                        self.field[r][c] = ' '
+                        removed_any = True
                 
-                # Skip empty cells and cells that are already marked for removal
-                if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
-                    continue
-                            
-                # Check if the cell can fall
-                if r < self.rows - 1 and self.field[r + 1][c] == ' ':
-                    # Find the lowest empty cell below
-                    lowest_empty = r + 1
-                    while lowest_empty < self.rows - 1 and self.field[lowest_empty + 1][c] == ' ':
-                        lowest_empty += 1
-                    
-                    # Move the cell down
-                    self.field[lowest_empty][c] = self.field[r][c]
-                    self.field[r][c] = ' '
-                    moved = True
-                    
-                    # If this is part of a horizontal piece, move the other part as well
-                    if isinstance(self.field[lowest_empty][c], str) and len(self.field[lowest_empty][c]) == 2 and self.field[lowest_empty][c][0] in 'LR':
-                        # Find the other part of the horizontal piece
-                        other_c = c + 1 if self.field[lowest_empty][c][0] == 'L' else c - 1
-                        if 0 <= other_c < self.cols and r < self.rows - 1 and self.field[r + 1][other_c] == ' ':
-                            # Move the other part down to the same row
-                            self.field[lowest_empty][other_c] = self.field[r][other_c]
-                            self.field[r][other_c] = ' '
-                            moved = True
+            # Apply gravity to the field
+            field_moved = self._apply_field_gravity()
+            
+            # Process any matches that result from gravity
+            matches_found = self._process_matches()
+            
+            # If we found matches, continue the loop to process them
+            if matches_found:
+                moved = True
+                # Remove the matched cells immediately after processing
+                for r in range(self.rows):
+                    for c in range(self.cols):
+                        if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
+                            self.field[r][c] = ' '
+                # Apply gravity again after removing matches
+                field_moved = self._apply_field_gravity() or field_moved
+            # If we removed any cells or moved anything, continue the loop
+            elif removed_any or field_moved:
+                moved = True
+            # Otherwise, we're done
+            else:
+                break
         
         return moved
 
@@ -530,124 +577,85 @@ class GameState:
             
         self.field[row][col] = color_upper  # Store in uppercase for consistency
 
-    def _check_match(self, row: int, col: int) -> list:
+    def _check_match(self, row: int, col: int) -> list[tuple[int, int]]:
         """
-        Checks for matches starting from the given cell.
-
-        Args:
-            row (int): The row index.
-            col (int): The column index.
-
-        Returns:
-            List[Tuple[int, int]]: A list of coordinates that are part of a match.
+        Check for matches starting from the given position.
+        Returns a list of (row, col) positions that form a match.
         """
+        if self.field[row][col] == ' ':
+            return []
+            
+        # Get the base color (handling both regular cells and marked cells)
         cell = self.field[row][col]
-        if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
-            return []
-            
-        # Extract base color (handles both single-char colors and marked cells)
-        if isinstance(cell, str):
-            if len(cell) > 1 and cell[0] in 'LR':
-                # Handle faller segments (e.g., 'Lr', 'Rb')
-                color = cell[1].upper()
-            else:
-                # Handle single characters and marked cells
-                color = cell[-1].upper() if len(cell) > 1 else cell.upper()
+        if isinstance(cell, str) and cell.startswith('*'):
+            color = cell[1:]
         else:
-            color = str(cell).upper()
-            
-        if color not in 'RBY':
-            return []
-            
-        matched = set()
+            color = cell
         
-        # Directions: (dr, dc) for horizontal, vertical, and both diagonals
-        directions = [
-            [(0, 1), (0, -1)],   # Horizontal
-            [(1, 0), (-1, 0)],    # Vertical
-            [(1, 1), (-1, -1)],   # Diagonal down-right
-            [(1, -1), (-1, 1)]    # Diagonal down-left
-        ]
+        # Directions: right, down, down-right, down-left
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        matches = []
         
-        for direction_pair in directions:
-            # Count matching cells in both directions of the pair
-            count = 1  # Start with the current cell
+        for dr, dc in directions:
+            # Check in positive direction
             cells = [(row, col)]
+            r, c = row + dr, col + dc
+            while 0 <= r < self.rows and 0 <= c < self.cols:
+                cell = self.field[r][c]
+                cell_color = cell[1:] if isinstance(cell, str) and cell.startswith('*') else cell
+                if cell != ' ' and cell_color == color:
+                    cells.append((r, c))
+                    r += dr
+                    c += dc
+                else:
+                    break
             
-            for dr, dc in direction_pair:
-                r, c = row + dr, col + dc
-                while 0 <= r < self.rows and 0 <= c < self.cols:
-                    cell = self.field[r][c]
-                    if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
-                        break
-                        
-                    # Extract the cell's color
-                    cell_color = None
-                    if isinstance(cell, str):
-                        if len(cell) > 1 and cell[0] in 'LR':
-                            cell_color = cell[1].upper()
-                        else:
-                            cell_color = cell[-1].upper() if len(cell) > 1 else cell.upper()
-                    else:
-                        cell_color = str(cell).upper()
-                    
-                    if cell_color == color:
-                        count += 1
-                        cells.append((r, c))
-                        r += dr
-                        c += dc
-                    else:
-                        break
+            # Check in negative direction
+            r, c = row - dr, col - dc
+            while 0 <= r < self.rows and 0 <= c < self.cols:
+                cell = self.field[r][c]
+                cell_color = cell[1:] if isinstance(cell, str) and cell.startswith('*') else cell
+                if cell != ' ' and cell_color == color:
+                    cells.insert(0, (r, c))
+                    r -= dr
+                    c -= dc
+                else:
+                    break
             
-            # If we found 4 or more in a line (including the starting cell)
-            if count >= 4:
-                matched.update(cells)
+            # If we found 3 or more in a line
+            if len(cells) >= 3:
+                if len(cells) > len(matches):
+                    matches = cells
         
-        return list(matched)
+        return matches
 
     def _process_matches(self) -> bool:
         """
-        Checks the entire field for matches, marks them for removal, and removes them.
-        
-        Returns:
-            bool: True if any matches were found and removed, False otherwise
+        Process the entire field for matches and mark them for removal.
+        Returns True if any matches were found, False otherwise.
         """
-        matched_cells = set()
+        matches_found = False
         
         # First pass: find all matches
         for r in range(self.rows):
             for c in range(self.cols):
-                cell = self.field[r][c]
-                # Skip empty cells and already matched cells
-                if cell == ' ' or (isinstance(cell, str) and cell.startswith('*')):
-                    continue
-                    
-                # Check for matches from this cell
-                matches = self._check_match(r, c)
-                if matches:
-                    matched_cells.update(matches)
+                if self.field[r][c] != ' ' and not (isinstance(self.field[r][c], str) and self.field[r][c].startswith('*')):
+                    matches = self._check_match(r, c)
+                    if len(matches) >= 3:  # Only mark if we have at least 3 in a row/column
+                        for match_r, match_c in matches:
+                            # Only mark if not already matched
+                            cell = self.field[match_r][match_c]
+                            if not (isinstance(cell, str) and cell.startswith('*')):
+                                # Preserve the original color when marking
+                                if isinstance(cell, str) and len(cell) > 1 and cell[0] in 'LR':
+                                    # Handle faller segments (L/R markers)
+                                    self.field[match_r][match_c] = f'*{cell[1:]}'
+                                else:
+                                    # For single character cells, just add asterisk
+                                    self.field[match_r][match_c] = f'*{cell}'
+                                matches_found = True
         
-        if not matched_cells:
-            return False  # No matches found
-            
-        # Mark matched cells for display
-        for r, c in matched_cells:
-            cell = self.field[r][c]
-            # Only mark if not already marked
-            if not (isinstance(cell, str) and cell.startswith('*')):
-                # Preserve the original color when marking
-                if isinstance(cell, str) and len(cell) > 1 and cell[0] in 'LR':
-                    # Handle faller segments (L/R markers)
-                    self.field[r][c] = f'*{cell[1]}*'
-                else:
-                    self.field[r][c] = f'*{cell}*'
-        
-        # Now remove the matched cells
-        for r, c in matched_cells:
-            self.field[r][c] = ' '
-        
-        # Let the main loop handle gravity application
-        return True  # Matches were found and removed
+        return matches_found
 
     def has_viruses(self) -> bool:
         """
@@ -661,9 +669,7 @@ class GameState:
                 if isinstance(cell, str):
                     # Check for lowercase letter (virus) in the cell
                     # Handle marked cells (e.g., '*r*') and faller segments (e.g., 'Lr')
-                    if (cell.islower() or  # Single lowercase character
-                        (len(cell) > 1 and cell[-1].islower()) or  # Last character is lowercase (e.g., '*r*' or 'Lr')
-                        (len(cell) > 2 and cell[1].islower())):  # Middle character is lowercase (e.g., '*r*')
+                    if cell.islower() or (len(cell) > 1 and any(c.islower() for c in cell)):
                         return True
         return False
     
