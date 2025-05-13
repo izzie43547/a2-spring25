@@ -344,27 +344,6 @@ class GameState:
 
     def _rotate_counterclockwise(self) -> None:
         """
-<<<<<<< HEAD
-        Applies gravity to the entire field.
-        """
-        # Apply gravity bottom-up for better stability
-        for r in range(self.rows-1, -1, -1):
-            for c in range(self.cols):
-                if self.field[r][c] != ' ':
-                    # Skip viruses as they are not affected by gravity
-                    if isinstance(self.field[r][c], str) and self.field[r][c].islower():
-                        continue
-                        
-                    # Find the lowest empty cell below this one
-                    lowest_empty = r
-                    while lowest_empty < self.rows - 1 and self.field[lowest_empty + 1][c] == ' ':
-                        lowest_empty += 1
-                    
-                    if lowest_empty != r:
-                        # Move the piece down
-                        self.field[lowest_empty][c] = self.field[r][c]
-                        self.field[r][c] = ' '
-=======
         Rotates the faller counterclockwise with wall kick support.
         """
         if not self.faller:
@@ -381,7 +360,7 @@ class GameState:
                 self.faller['segments'] = new_segments
                 self.faller['orientation'] = 'vertical'
                 return
-            
+                
             # Try wall kick (move right)
             new_segments = [(r_pivot - 1, c_pivot, segments[0][2]), (r_pivot, c_pivot, segments[1][2])]
             if self._can_move(new_segments):
@@ -442,13 +421,16 @@ class GameState:
             elif direction == 'B':
                 self._rotate_counterclockwise()
 
-    def apply_gravity(self) -> None:
+    def apply_gravity(self) -> bool:
         """
         Applies gravity to the current faller or any floating capsule segments.
         Processes matches after each gravity application.
+        
+        Returns:
+            bool: True if any movement occurred, False otherwise
         """
         if self.game_over:
-            return
+            return False
                     
         moved = False
             
@@ -509,101 +491,17 @@ class GameState:
         
         return moved
 
-    def apply_gravity(self) -> None:
-        """
-        Applies gravity to the current faller or any floating capsule segments.
-        Processes matches after each gravity application.
-        """
-        if self.game_over:
-            return
-                        
-        moved = False
-                
-        # Handle falling of the current faller
-        if self.faller and not self.faller['landed']:
-            new_segments = [(r + 1, c, color) for r, c, color in self.faller['segments']]
-            if self._can_move(new_segments):
-                self.faller['segments'] = new_segments
-                moved = True
-            else:
-                # Faller has landed
-                self.faller['landed'] = True
-                # Place the faller on the field
-                for r, c, color in self.faller['segments']:
-                    if self.faller['orientation'] == 'horizontal':
-                        left_c = min(fc for _, fc, _ in self.faller['segments'])
-                        if c == left_c:
-                            self.field[r][c] = f'L{color}'  # Left horizontal
-                        else:
-                            self.field[r][c] = f'R{color}'  # Right horizontal
-                    else:
-                        self.field[r][c] = color  # Vertical is treated as single segments upon landing
-                self.faller = None
-                moved = True
-            
-        # Process gravity and matches in a loop to handle cascading effects
-        while True:
-            # First, remove any cells marked for removal
-            removed_any = False
-            for r in range(self.rows):
-                for c in range(self.cols):
-                    if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
-                        self.field[r][c] = ' '
-                        removed_any = True
-                
-            # Apply gravity to the field
-            field_moved = self._apply_field_gravity()
-            
-            # Process any matches that result from gravity
-            matches_found = self._process_matches()
-            
-            # If we found matches, continue the loop to process them
-            if matches_found:
-                moved = True
-                # Remove the matched cells immediately after processing
-                for r in range(self.rows):
-                    for c in range(self.cols):
-                        if isinstance(self.field[r][c], str) and self.field[r][c].startswith('*'):
-                            self.field[r][c] = ' '
-                # Apply gravity again after removing matches
-                field_moved = self._apply_field_gravity() or field_moved
-            # If we removed any cells or moved anything, continue the loop
-            elif removed_any or field_moved:
-                moved = True
-            # Otherwise, we're done
-            else:
-                break
-        
-        return moved
->>>>>>> temp-changes
-
     def add_virus(self, row: int, col: int, color: str) -> None:
         """
-        Adds a virus to the specified cell if the cell is empty.
+        Adds a virus to the specified position if it's empty.
 
         Args:
-            row (int): The row index (0-based).
-            col (int): The column index (0-based).
-            color (str): The color of the virus ('r', 'R', 'b', 'B', 'y', or 'Y').
-<<<<<<< HEAD
+            row (int): The row to add the virus to (0-based).
+            col (int): The column to add the virus to (0-based).
+            color (str): The color of the virus ('R', 'B', or 'Y').
         """
-        if 0 <= row < self.rows and 0 <= col < self.cols:
-            self.field[row][col] = color.lower()  # Store virus colors as lowercase
-=======
-            
-        Raises:
-            ValueError: If the cell is already occupied or color is invalid.
-        """
-        if not (0 <= row < self.rows and 0 <= col < self.cols):
-            raise ValueError(f"Position ({row}, {col}) is out of bounds")
-        if self.field[row][col] != ' ':
-            raise ValueError(f"Cell at position ({row}, {col}) is already occupied")
-        color_upper = color.upper()
-        if color_upper not in ['R', 'B', 'Y']:
-            raise ValueError(f"Invalid virus color: {color}. Must be 'r', 'b', or 'y' (case insensitive)")
-            
-        self.field[row][col] = color_upper  # Store in uppercase for consistency
->>>>>>> temp-changes
+        if 0 <= row < self.rows and 0 <= col < self.cols and self.field[row][col] == ' ':
+            self.field[row][col] = color.lower()  # Viruses are lowercase
 
     def _check_match(self, row: int, col: int) -> list[tuple[int, int]]:
         """
@@ -638,52 +536,106 @@ class GameState:
                 else:
                     break
             
-            # Check in negative direction
-            r, c = row - dr, col - dc
-            while 0 <= r < self.rows and 0 <= c < self.cols:
-                cell = self.field[r][c]
-                cell_color = cell[1:] if isinstance(cell, str) and cell.startswith('*') else cell
-                if cell != ' ' and cell_color == color:
-                    cells.insert(0, (r, c))
-                    r -= dr
-                    c -= dc
-                else:
-                    break
-            
-            # If we found 3 or more in a line
+            # Check if we have at least 3 matching cells
             if len(cells) >= 3:
-                if len(cells) > len(matches):
-                    matches = cells
+                matches.extend(cells)
         
-        return matches
+        return list(set(matches))  # Remove duplicates in case of overlapping matches
+
+    def add_virus(self, row: int, col: int, color: str) -> None:
+        """
+        Adds a virus to the specified position if it's empty.
+
+        Args:
+            row (int): The row to add the virus to (0-based).
+            col (int): The column to add the virus to (0-based).
+            color (str): The color of the virus ('R', 'B', or 'Y').
+        """
+        if 0 <= row < self.rows and 0 <= col < self.cols and self.field[row][col] == ' ':
+            self.field[row][col] = color.lower()  # Viruses are lowercase
 
     def _process_matches(self) -> bool:
         """
-        Process the entire field for matches and mark them for removal.
-        Returns True if any matches were found, False otherwise.
-        """
-        matches_found = False
+        Processes all matches on the field and marks them for removal.
         
-        # First pass: find all matches
+        Returns:
+            bool: True if any matches were found, False otherwise
+        """
+        # Create a copy of the field to mark matches
+    matches = [[False for _ in range(self.cols)] for _ in range(self.rows)]
+    found_match = False
+
+    # Check for horizontal matches
+    for r in range(self.rows):
+        c = 0
+        while c < self.cols - 1:
+            if (self.field[r][c] != ' ' and 
+                self.field[r][c] == self.field[r][c + 1] and 
+                not self.field[r][c].startswith('*')):
+                # Found a potential match, check how long it is
+                match_length = 2
+                while (c + match_length < self.cols and 
+                       self.field[r][c] == self.field[r][c + match_length] and 
+                       not self.field[r][c + match_length].startswith('*')):
+                    match_length += 1
+
+                # If we have a match of 3 or more, mark all cells
+                if match_length >= 3:
+                    found_match = True
+                    for i in range(match_length):
+                        matches[r][c + i] = True
+                c += match_length - 1
+            c += 1
+
+    # Check for vertical matches
+    for c in range(self.cols):
+        r = 0
+        while r < self.rows - 1:
+            if (self.field[r][c] != ' ' and 
+                self.field[r][c] == self.field[r + 1][c] and 
+                not self.field[r][c].startswith('*')):
+                # Found a potential match, check how long it is
+                match_length = 2
+                while (r + match_length < self.rows and 
+                       self.field[r][c] == self.field[r + match_length][c] and 
+                       not self.field[r + match_length][c].startswith('*')):
+                    match_length += 1
+
+                # If we have a match of 3 or more, mark all cells
+                if match_length >= 3:
+                    found_match = True
+                    for i in range(match_length):
+                        matches[r + i][c] = True
+                r += match_length - 1
+            r += 1
+        for c in range(self.cols):
+            r = 0
+            while r < self.rows - 1:
+                if (self.field[r][c] != ' ' and 
+                    self.field[r][c] == self.field[r + 1][c] and 
+                    not self.field[r][c].startswith('*')):
+                    # Found a potential match, check how long it is
+                    match_length = 2
+                    while (r + match_length < self.rows and 
+                           self.field[r][c] == self.field[r + match_length][c] and 
+                           not self.field[r + match_length][c].startswith('*')):
+                        match_length += 1
+
+                    # If we have a match of 3 or more, mark all cells
+                    if match_length >= 3:
+                        found_match = True
+                        for i in range(match_length):
+                            matches[r + i][c] = True
+                    r += match_length - 1
+                r += 1
+
+        # Mark all matched cells for removal
         for r in range(self.rows):
             for c in range(self.cols):
-                if self.field[r][c] != ' ' and not (isinstance(self.field[r][c], str) and self.field[r][c].startswith('*')):
-                    matches = self._check_match(r, c)
-                    if len(matches) >= 3:  # Only mark if we have at least 3 in a row/column
-                        for match_r, match_c in matches:
-                            # Only mark if not already matched
-                            cell = self.field[match_r][match_c]
-                            if not (isinstance(cell, str) and cell.startswith('*')):
-                                # Preserve the original color when marking
-                                if isinstance(cell, str) and len(cell) > 1 and cell[0] in 'LR':
-                                    # Handle faller segments (L/R markers)
-                                    self.field[match_r][match_c] = f'*{cell[1:]}'
-                                else:
-                                    # For single character cells, just add asterisk
-                                    self.field[match_r][match_c] = f'*{cell}'
-                                matches_found = True
-        
-        return matches_found
+                if matches[r][c]:
+                    self.field[r][c] = f'*{self.field[r][c]}'  # Mark for removal
+
+        return found_match
 
     def has_viruses(self) -> bool:
         """
@@ -700,4 +652,3 @@ class GameState:
                     if cell.islower() or (len(cell) > 1 and any(c.islower() for c in cell)):
                         return True
         return False
-    
