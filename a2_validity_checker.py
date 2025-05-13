@@ -43,16 +43,15 @@ class TextProcessReadTimeout(Exception):
     pass
 
 
-
 class TextProcess:
     _READ_INTERVAL_IN_SECONDS = 0.025
 
 
     def __init__(self, args: List[str], working_directory: str):
         self._process = subprocess.Popen(
-            args, cwd = working_directory, bufsize = 0,
-            stdin = subprocess.PIPE, stdout = subprocess.PIPE,
-            stderr = subprocess.STDOUT)
+            args, cwd=working_directory, bufsize=0,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
 
         self._stdout_read_trigger = queue.Queue()
         self._stdout_buffer = queue.Queue()
@@ -81,7 +80,9 @@ class TextProcess:
 
     def write_line(self, line: str) -> None:
         try:
-            self._process.stdin.write((line + '\n').encode(locale.getpreferredencoding(False)))
+            self._process.stdin.write(
+                (line + '\n').encode(locale.getpreferredencoding(False))
+            )
             self._process.stdin.flush()
 
         except OSError:
@@ -90,16 +91,15 @@ class TextProcess:
 
     def read_line(self, timeout: float = None) -> str or None:
         self._stdout_read_trigger.put('read')
-        
         sleep_time = 0
         
-        while timeout == None or sleep_time < timeout:
+        while timeout is None or sleep_time < timeout:
             try:
                 next_result = self._stdout_buffer.get_nowait()
 
-                if next_result == None:
+                if next_result is None:
                     return None
-                elif isinstance(next_result, Exception):
+                if isinstance(next_result, Exception):
                     raise next_result
                 else:
                     line = next_result.decode(locale.getpreferredencoding(False))
@@ -120,7 +120,7 @@ class TextProcess:
 
     def _stdout_read_loop(self):
         try:
-            while self._process.returncode == None:
+            while self._process.returncode is None:
                 if self._stdout_read_trigger.get() == 'read':
                     line = self._process.stdout.readline()
 
@@ -149,8 +149,7 @@ class TestInputLine:
     def execute(self, process: TextProcess) -> None:
         try:
             process.write_line(self._text)
-
-        except Exception as e:
+        except Exception:
             print_labeled_output(
                 'EXCEPTION',
                 *[tb_line.rstrip() for tb_line in traceback.format_exc().split('\n')])
@@ -181,7 +180,7 @@ class TestOutputLine:
 
             raise TestFailure()
 
-        if output_line != None:
+        if output_line is not None:
             if output_line.endswith('\r\n'):
                 output_line = output_line[:-2]
             elif output_line.endswith('\n'):
