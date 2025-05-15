@@ -9,6 +9,7 @@ import sys
 from game_logic import GameState
 from ui import display_field, handle_command, parse_command
 
+
 def main() -> None:
     """
     Main entry point for the Dr. Mario game.
@@ -17,10 +18,10 @@ def main() -> None:
         # Read rows and columns
         rows = int(input())
         cols = int(input())
-        
+
         # Read initial configuration type
         config = input().strip().upper()
-        
+
         initial_field = None
         if config == 'CONTENTS':
             initial_field = []
@@ -33,10 +34,7 @@ def main() -> None:
         
         # Initialize game state
         game_state = GameState(rows, cols, initial_field)
-        
-        # Display initial state
-        display_field(game_state)
-        
+
         # Display initial state
         display_field(game_state)
         
