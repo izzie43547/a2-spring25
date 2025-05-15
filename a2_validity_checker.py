@@ -4,9 +4,9 @@
 #
 # NOTE: Heavily adapted from project4_sanitychecker.py written by Alex Thornton.
 #
-# This is a sanity checker for your Assignment #2 solution, which checks whether
-# your solution meets some basic requirements with respect to reading input
-# formatting its output:
+# This is a sanity checker for your Assignment #2 solution, which checks
+# whether your solution meets some basic requirements with respect to reading
+# input and formatting its output:
 #
 # * The file is named correctly
 # * It's possible to run the program by executing the module
@@ -14,7 +14,7 @@
 #   to the example shown in the assignment write-up)
 #
 # Note that this assignment's output depends not only on its input, but also
-# on the presence of certain files that are being searched, so this 
+# on the presence of certain files that are being searched, so this
 # checker will actually create a subdirectory within the directory where
 # this module is stored, then create some files with certain characteristics,
 # and finally will run your program and verify its output.
@@ -46,7 +46,6 @@ class TextProcessReadTimeout(Exception):
 class TextProcess:
     _READ_INTERVAL_IN_SECONDS = 0.025
 
-
     def __init__(self, args: List[str], working_directory: str):
         self._process = subprocess.Popen(
             args, cwd=working_directory, bufsize=0,
@@ -57,7 +56,7 @@ class TextProcess:
         self._stdout_buffer = queue.Queue()
 
         self._stdout_thread = threading.Thread(
-            target = self._stdout_read_loop, daemon = True)
+            target=self._stdout_read_loop, daemon=True)
 
         self._stdout_thread.start()
 
@@ -77,7 +76,6 @@ class TextProcess:
         self._process.stdout.close()
         self._process.stdin.close()
 
-
     def write_line(self, line: str) -> None:
         try:
             self._process.stdin.write(
@@ -92,7 +90,7 @@ class TextProcess:
     def read_line(self, timeout: float = None) -> str or None:
         self._stdout_read_trigger.put('read')
         sleep_time = 0
-        
+
         while timeout is None or sleep_time < timeout:
             try:
                 next_result = self._stdout_buffer.get_nowait()

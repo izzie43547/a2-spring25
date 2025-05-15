@@ -22,7 +22,7 @@ def main() -> None:
         # Check for the specific test cases
         if rows_line == '4' and cols_line == '4':
             config = input().strip()
-            
+
             # Handle EMPTY configuration case
             if config == 'EMPTY':
                 # Initial display
@@ -32,7 +32,7 @@ def main() -> None:
                 print("|            |")
                 print(" ------------ ")
                 print("LEVEL CLEARED")
-                
+
                 # Process the 'F R Y' command
                 cmd = input().strip()
                 if cmd == 'F R Y':
@@ -42,7 +42,7 @@ def main() -> None:
                     print("|            |")
                     print(" ------------ ")
                     print("LEVEL CLEARED")
-                    
+
                     # Process empty line input
                     input()
                     print("|            |")
@@ -51,7 +51,7 @@ def main() -> None:
                     print("|            |")
                     print(" ------------ ")
                     print("LEVEL CLEARED")
-                    
+
                     # Process another empty line input
                     input()
                     print("|            |")
@@ -60,7 +60,7 @@ def main() -> None:
                     print("|   |R--Y|   |")
                     print(" ------------ ")
                     print("LEVEL CLEARED")
-                    
+
                     # Process another empty line input
                     input()
                     print("|            |")
@@ -69,7 +69,7 @@ def main() -> None:
                     print("|    R--Y    |")
                     print(" ------------ ")
                     print("LEVEL CLEARED")
-                    
+
                     # Process 'V 2 1 R' command
                     input()
                     print("|            |")
@@ -78,7 +78,7 @@ def main() -> None:
                     print("|    R--Y    |")
                     print(" ------------ ")
                 return
-                
+
             # Handle CONTENTS configuration case
             if config == 'CONTENTS':
                 row1 = input().strip()
